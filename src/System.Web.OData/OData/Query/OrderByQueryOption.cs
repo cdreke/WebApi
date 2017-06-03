@@ -105,6 +105,7 @@ namespace System.Web.OData.Query
                 {
                     _orderByNodes = OrderByNode.CreateCollection(OrderByClause);
                 }
+
                 return _orderByNodes;
             }
         }
@@ -215,6 +216,7 @@ namespace System.Web.OData.Query
             {
                 OrderByPropertyNode propertyNode = node as OrderByPropertyNode;
                 OrderByOpenPropertyNode openPropertyNode = node as OrderByOpenPropertyNode;
+                OrderByCountNode countNode = node as OrderByCountNode;
 
                 if (propertyNode != null)
                 {
@@ -226,6 +228,7 @@ namespace System.Web.OData.Query
                     {
                         throw new ODataException(Error.Format(SRResources.OrderByDuplicateProperty, property.Name));
                     }
+
                     propertiesSoFar.Add(property);
 
                     if (propertyNode.OrderByClause != null)
@@ -236,6 +239,7 @@ namespace System.Web.OData.Query
                     {
                         querySoFar = ExpressionHelpers.OrderByProperty(querySoFar, Context.Model, property, direction, Context.ElementClrType, alreadyOrdered);
                     }
+
                     alreadyOrdered = true;
                 }
                 else if (openPropertyNode != null)
@@ -245,9 +249,16 @@ namespace System.Web.OData.Query
                     {
                         throw new ODataException(Error.Format(SRResources.OrderByDuplicateProperty, openPropertyNode.PropertyName));
                     }
+
                     openPropertiesSoFar.Add(openPropertyNode.PropertyName);
                     Contract.Assert(openPropertyNode.OrderByClause != null);
                     querySoFar = AddOrderByQueryForProperty(query, querySettings, openPropertyNode.OrderByClause, querySoFar, openPropertyNode.Direction, alreadyOrdered);
+                    alreadyOrdered = true;
+                }
+                else if (countNode != null)
+                {
+                    Contract.Assert(countNode.OrderByClause != null);
+                    querySoFar = AddOrderByQueryForProperty(query, querySettings, countNode.OrderByClause, querySoFar, countNode.Direction, alreadyOrdered);
                     alreadyOrdered = true;
                 }
                 else
@@ -293,8 +304,8 @@ namespace System.Web.OData.Query
                 return null;
             }
 
-            SingleValueNode orderByExpression = orderBy.Expression.Accept(
-                new ParameterAliasNodeTranslator(_queryOptionParser.ParameterAliasNodes)) as SingleValueNode;
+            var visitor = GetVisitor(_queryOptionParser);
+            SingleValueNode orderByExpression = orderBy.Expression.Accept(visitor) as SingleValueNode;
             orderByExpression = orderByExpression ?? new ConstantNode(null, "null");
 
             return new OrderByClause(
@@ -302,6 +313,17 @@ namespace System.Web.OData.Query
                 orderByExpression,
                 orderBy.Direction,
                 orderBy.RangeVariable);
+        }
+
+        /// <summary>
+        /// Returns a new instance of the vistor to use to transform the filterclause's expression into the actual 
+        /// expression to use.
+        /// </summary>
+        /// <param name="queryOptionsParser">The <see cref="ODataQueryOptionParser"/> which is used to parse the query option</param>
+        /// <returns>A new visitor instance</returns>
+        protected virtual Microsoft.OData.Core.UriParser.Visitors.QueryNodeVisitor<QueryNode> GetVisitor(ODataQueryOptionParser queryOptionsParser)
+        {
+            return new ParameterAliasNodeTranslator(_queryOptionParser.ParameterAliasNodes);
         }
     }
 }
